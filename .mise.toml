@@ -1,0 +1,6 @@
+[tools]
+java = "corretto-21"
+kotlin = "2.2.21"
+
+[env]
+JAVA_TOOL_OPTIONS = "-Dfile.encoding=UTF-8"

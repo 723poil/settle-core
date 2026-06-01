@@ -1,0 +1,16 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: settle-core-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: settle_core
+      POSTGRES_USER: settle
+      POSTGRES_PASSWORD: settle
+      TZ: UTC
+    volumes:
+      - settle-core-postgres:/var/lib/postgresql/data
+
+volumes:
+  settle-core-postgres:
