@@ -11,7 +11,7 @@ spring:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
   flyway:
-    enabled: true
+    enabled: false
     locations: classpath:db/migration
   jpa:
     hibernate:

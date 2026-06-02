@@ -2,6 +2,17 @@ import io.spring.gradle.dependencymanagement.dsl.DependencyManagementExtension
 import org.jetbrains.kotlin.gradle.dsl.KotlinJvmProjectExtension
 import org.springframework.boot.gradle.plugin.SpringBootPlugin
 
+buildscript {
+    repositories {
+        mavenCentral()
+    }
+
+    dependencies {
+        classpath("org.flywaydb:flyway-database-postgresql:12.6.2")
+        classpath("org.postgresql:postgresql:42.7.8")
+    }
+}
+
 plugins {
     base
     kotlin("jvm") version "2.2.21" apply false
@@ -9,6 +20,7 @@ plugins {
     kotlin("plugin.jpa") version "2.2.21" apply false
     id("org.springframework.boot") version "4.0.6" apply false
     id("io.spring.dependency-management") version "1.1.7" apply false
+    id("org.flywaydb.flyway") version "12.6.2"
     id("com.diffplug.spotless") version "8.6.0"
 }
 
@@ -18,6 +30,16 @@ description = "Payment settlement core"
 
 val ktlintVersion = "1.8.0"
 val kotlinVersion = "2.2.21"
+
+flyway {
+    url = System.getenv("DB_URL") ?: "jdbc:postgresql://localhost:5432/settle_core"
+    user = System.getenv("DB_USERNAME") ?: "settle"
+    password = System.getenv("DB_PASSWORD") ?: "settle"
+    defaultSchema = "migration"
+    schemas = arrayOf("migration", "merchant", "payment", "settlement")
+    locations = arrayOf("filesystem:libs/persistence/src/main/resources/db/migration")
+    cleanDisabled = true
+}
 
 allprojects {
     group = rootProject.group

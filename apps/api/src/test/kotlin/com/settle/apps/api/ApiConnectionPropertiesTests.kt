@@ -14,6 +14,7 @@ class ApiConnectionPropertiesTests {
         assertEquals("\${REDIS_HOST:localhost}", property("spring.data.redis.host"))
         assertEquals("\${REDIS_PORT:6379}", property("spring.data.redis.port"))
         assertEquals("\${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}", property("spring.kafka.bootstrap-servers"))
+        assertEquals("false", property("spring.flyway.enabled"))
     }
 
     private fun property(name: String): String? = properties[name]?.toString()

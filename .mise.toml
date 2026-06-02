@@ -6,24 +6,44 @@ kotlin = "2.2.21"
 JAVA_TOOL_OPTIONS = "-Dfile.encoding=UTF-8"
 
 [tasks.infra-up]
-description = "Start local PostgreSQL, Redis, and Kafka containers"
+description = "로컬 PostgreSQL, Redis, Kafka 컨테이너 실행"
 run = "docker compose up -d postgres redis kafka"
 
 [tasks.infra-down]
-description = "Stop local infrastructure containers"
+description = "로컬 인프라 컨테이너 종료"
 run = "docker compose down"
 
 [tasks.infra-ps]
-description = "Show local infrastructure container status"
+description = "로컬 인프라 컨테이너 상태 확인"
 run = "docker compose ps postgres redis kafka"
 
+[tasks.flyway-info]
+description = "Flyway migration 상태 조회"
+depends = ["infra-up"]
+run = "./gradlew flywayInfo"
+
+[tasks.flyway-validate]
+description = "Flyway migration 파일 검증"
+depends = ["infra-up"]
+run = "./gradlew flywayValidate"
+
+[tasks.flyway-migrate]
+description = "대기 중인 Flyway migration 적용"
+depends = ["infra-up"]
+run = "./gradlew flywayMigrate"
+
+[tasks.flyway-repair]
+description = "Flyway schema history 메타데이터 복구"
+depends = ["infra-up"]
+run = "./gradlew flywayRepair"
+
 [tasks.api]
-description = "Run the API server"
+description = "API 서버 실행"
 depends = ["infra-up"]
 run = "./gradlew :apps:api:bootRun"
 
 [tasks.api-dev]
-description = "Run the API server with Spring Boot DevTools restart"
+description = "API 서버 개발 모드 실행"
 depends = ["infra-up"]
 run = """
 ./gradlew :apps:api:classes --continuous &
@@ -33,12 +53,12 @@ trap 'kill $watch_pid' EXIT
 """
 
 [tasks.scheduler]
-description = "Run the scheduler process"
+description = "스케줄러 프로세스 실행"
 depends = ["infra-up"]
 run = "./gradlew :apps:scheduler:bootRun"
 
 [tasks.scheduler-dev]
-description = "Run the scheduler process with Spring Boot DevTools restart"
+description = "스케줄러 개발 모드 실행"
 depends = ["infra-up"]
 run = """
 ./gradlew :apps:scheduler:classes --continuous &
@@ -48,11 +68,11 @@ trap 'kill $watch_pid' EXIT
 """
 
 [tasks.check]
-description = "Run formatting checks and tests"
+description = "포맷 검사와 테스트 실행"
 run = "./gradlew spotlessCheck check"
 
 [tasks.format]
-description = "Apply Kotlin and misc formatting"
+description = "Kotlin과 기타 파일 포맷 적용"
 run = "./gradlew spotlessApply"
 
 [hooks]

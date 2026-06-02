@@ -58,6 +58,16 @@ mise run infra-ps
 mise run infra-down
 ```
 
+Flyway migration은 애플리케이션 시작 시 자동 실행하지 않고, root Gradle task를 통해 한 곳에서만 실행합니다.
+같은 DB에 여러 앱이 붙어도 migration 실행 주체가 섞이지 않도록, 앱 실행 명령과 migration 명령은 분리합니다.
+
+```bash
+mise run flyway-info
+mise run flyway-validate
+mise run flyway-migrate
+mise run flyway-repair
+```
+
 ## Run Applications
 
 API 서버 실행:
@@ -93,6 +103,8 @@ mise run scheduler-dev
 - PostgreSQL: `jdbc:postgresql://localhost:5432/settle_core`
 - Redis: `localhost:6379`
 - Kafka: `localhost:9092`
+
+PostgreSQL schema는 `public`을 사용하지 않고 도메인별로 분리합니다. Flyway history는 `migration` schema에 두고, 도메인 테이블은 `merchant`, `payment`, `settlement` schema에 배치합니다.
 
 설정 파일:
 
