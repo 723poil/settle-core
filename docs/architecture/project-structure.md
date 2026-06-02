@@ -17,6 +17,7 @@ settle-core
 │   └── settlement
 └── libs
     ├── common
+    ├── infra
     ├── pg-client
     ├── persistence
     └── test-support
@@ -40,6 +41,7 @@ Domain modules are Gradle modules, not just folders. They should expose explicit
 ## Shared Libraries
 
 - `:libs:common`: pure common types and utilities, such as money values and domain event contracts.
+- `:libs:infra`: runtime infrastructure wiring shared by apps, such as Redis/Kafka starters and startup connection smoke checks.
 - `:libs:pg-client`: PG provider identifiers, PG client contracts, and provider-based client lookup. This is for multi-PG integration plumbing, not PG business rules.
 - `:libs:persistence`: JPA/Flyway/PostgreSQL support, shared persistence base classes, and database migrations.
 - `:libs:test-support`: shared test fixtures and Testcontainers dependencies.
@@ -52,6 +54,7 @@ Keep business rules out of `libs`. If code talks about payment state, settlement
 :apps:api
 :apps:scheduler
     -> :domains:*
+    -> :libs:infra
     -> :libs:persistence
 
 :domains:payment

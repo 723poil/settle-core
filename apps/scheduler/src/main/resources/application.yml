@@ -4,10 +4,14 @@ spring:
   main:
     web-application-type: none
   datasource:
-    url: ${SETTLE_DB_URL:jdbc:postgresql://localhost:5432/settle_core}
-    username: ${SETTLE_DB_USERNAME:settle}
-    password: ${SETTLE_DB_PASSWORD:settle}
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/settle_core}
+    username: ${DB_USERNAME:settle}
+    password: ${DB_PASSWORD:settle}
     driver-class-name: org.postgresql.Driver
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
   flyway:
     enabled: true
     locations: classpath:db/migration
@@ -20,7 +24,21 @@ spring:
         jdbc:
           time_zone: UTC
         format_sql: true
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      group-id: ${KAFKA_CONSUMER_GROUP:settle-core-scheduler}
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
 
 settle:
   scheduler:
-    enabled: ${SETTLE_SCHEDULER_ENABLED:true}
+    enabled: ${SCHEDULER_ENABLED:true}
+
+logging:
+  level:
+    org.apache.kafka.common.config.AbstractConfig: WARN

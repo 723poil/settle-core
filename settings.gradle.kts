@@ -11,6 +11,7 @@ include(
     ":domains:payment",
     ":domains:settlement",
     ":libs:common",
+    ":libs:infra",
     ":libs:pg-client",
     ":libs:persistence",
     ":libs:test-support",

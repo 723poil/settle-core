@@ -4,3 +4,56 @@ kotlin = "2.2.21"
 
 [env]
 JAVA_TOOL_OPTIONS = "-Dfile.encoding=UTF-8"
+
+[tasks.infra-up]
+description = "Start local PostgreSQL, Redis, and Kafka containers"
+run = "docker compose up -d postgres redis kafka"
+
+[tasks.infra-down]
+description = "Stop local infrastructure containers"
+run = "docker compose down"
+
+[tasks.infra-ps]
+description = "Show local infrastructure container status"
+run = "docker compose ps postgres redis kafka"
+
+[tasks.api]
+description = "Run the API server"
+depends = ["infra-up"]
+run = "./gradlew :apps:api:bootRun"
+
+[tasks.api-dev]
+description = "Run the API server with Spring Boot DevTools restart"
+depends = ["infra-up"]
+run = """
+./gradlew :apps:api:classes --continuous &
+watch_pid=$!
+trap 'kill $watch_pid' EXIT
+./gradlew :apps:api:bootRun
+"""
+
+[tasks.scheduler]
+description = "Run the scheduler process"
+depends = ["infra-up"]
+run = "./gradlew :apps:scheduler:bootRun"
+
+[tasks.scheduler-dev]
+description = "Run the scheduler process with Spring Boot DevTools restart"
+depends = ["infra-up"]
+run = """
+./gradlew :apps:scheduler:classes --continuous &
+watch_pid=$!
+trap 'kill $watch_pid' EXIT
+./gradlew :apps:scheduler:bootRun
+"""
+
+[tasks.check]
+description = "Run formatting checks and tests"
+run = "./gradlew spotlessCheck check"
+
+[tasks.format]
+description = "Apply Kotlin and misc formatting"
+run = "./gradlew spotlessApply"
+
+[hooks]
+enter = { task = "infra-up" }
