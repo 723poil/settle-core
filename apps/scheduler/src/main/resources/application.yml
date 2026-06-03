@@ -39,6 +39,20 @@ settle:
   scheduler:
     enabled: ${SCHEDULER_ENABLED:true}
 
+pg:
+  toss-payments:
+    secret-key: ${PG_TOSS_PAYMENTS_SECRET_KEY:}
+    base-url: ${PG_TOSS_PAYMENTS_BASE_URL:https://api.tosspayments.com}
+  paypal:
+    access-token: ${PG_PAYPAL_ACCESS_TOKEN:}
+    base-url: ${PG_PAYPAL_BASE_URL:https://api-m.paypal.com}
+  kiwoom-pay:
+    accounts:
+      - cpid: ${PG_KIWOOM_PAY_CPID:}
+        type: ${PG_KIWOOM_PAY_TYPE:PAYMENT}
+        authorization-key: ${PG_KIWOOM_PAY_AUTHORIZATION_KEY:}
+        ready-url: ${PG_KIWOOM_PAY_READY_URL:https://apitest.kiwoompay.co.kr/pay/ready}
+
 logging:
   level:
     org.apache.kafka.common.config.AbstractConfig: WARN

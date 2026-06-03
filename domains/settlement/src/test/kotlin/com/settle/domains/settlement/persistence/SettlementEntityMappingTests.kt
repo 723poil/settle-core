@@ -28,6 +28,7 @@ class SettlementEntityMappingTests {
             PgMerchantAccountEntity(
                 merchant = merchant,
                 pgProvider = pgProvider,
+                pgProduct = "payment",
                 pgMid = "mid-001",
                 displayName = "기본 MID",
             )
@@ -35,6 +36,7 @@ class SettlementEntityMappingTests {
             PaymentTransactionEntity(
                 merchant = merchant,
                 pgProvider = pgProvider,
+                pgProduct = "payment",
                 pgMerchantAccount = pgMerchantAccount,
                 merchantOrderId = "order-001",
                 pgTransactionId = "pg-tx-001",

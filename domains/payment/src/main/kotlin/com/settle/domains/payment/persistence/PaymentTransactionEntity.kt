@@ -23,7 +23,12 @@ import java.util.UUID
 @Table(
     schema = "payment",
     name = "payment_transactions",
-    uniqueConstraints = [UniqueConstraint(name = "uq_payment_transactions_pg", columnNames = ["pg_provider_id", "pg_transaction_id"])],
+    uniqueConstraints = [
+        UniqueConstraint(
+            name = "uq_payment_transactions_pg",
+            columnNames = ["pg_provider_id", "pg_product", "pg_transaction_id"],
+        ),
+    ],
 )
 open class PaymentTransactionEntity(
     @Id
@@ -35,6 +40,8 @@ open class PaymentTransactionEntity(
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "pg_provider_id", nullable = false)
     open var pgProvider: PgProviderEntity,
+    @Column(name = "pg_product", nullable = false, length = 60)
+    open var pgProduct: String,
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "pg_merchant_account_id", nullable = false)
     open var pgMerchantAccount: PgMerchantAccountEntity,

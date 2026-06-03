@@ -3,16 +3,16 @@ package com.settle.libs.pgclient
 class PgPaymentClientRegistry(
     clients: Collection<PgPaymentClient>,
 ) {
-    private val clientsByProvider =
+    private val clientsByRoute =
         clients
-            .groupBy { it.provider }
-            .mapValues { (provider, clients) ->
+            .groupBy { it.route }
+            .mapValues { (route, clients) ->
                 if (clients.size != 1) {
-                    throw DuplicatePgPaymentClientException(provider)
+                    throw DuplicatePgPaymentClientException(route)
                 }
 
                 clients.single()
             }
 
-    fun get(provider: PgProvider): PgPaymentClient = clientsByProvider[provider] ?: throw PgPaymentClientNotFoundException(provider)
+    fun get(route: PgPaymentRoute): PgPaymentClient = clientsByRoute[route] ?: throw PgPaymentClientNotFoundException(route)
 }

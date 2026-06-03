@@ -8,41 +8,52 @@ import kotlin.test.assertFailsWith
 
 class PgPaymentClientRegistryTests {
     @Test
-    fun findsClientByProvider() {
-        val provider = PgProvider("toss")
-        val client = StubPgPaymentClient(provider)
+    fun findsClientByRoute() {
+        val route = PgPaymentRoute(PgProvider("toss"), PgPaymentProduct("payment"))
+        val client = StubPgPaymentClient(route)
         val registry = PgPaymentClientRegistry(listOf(client))
 
-        assertEquals(client, registry.get(provider))
+        assertEquals(client, registry.get(route))
     }
 
     @Test
-    fun rejectsDuplicateClientsForSameProvider() {
+    fun allowsDifferentProductsForSameProvider() {
         val provider = PgProvider("toss")
+        val paymentClient = StubPgPaymentClient(PgPaymentRoute(provider, PgPaymentProduct("payment")))
+        val billingClient = StubPgPaymentClient(PgPaymentRoute(provider, PgPaymentProduct("billing")))
+        val registry = PgPaymentClientRegistry(listOf(paymentClient, billingClient))
+
+        assertEquals(paymentClient, registry.get(PgPaymentRoute(provider, PgPaymentProduct("payment"))))
+        assertEquals(billingClient, registry.get(PgPaymentRoute(provider, PgPaymentProduct("billing"))))
+    }
+
+    @Test
+    fun rejectsDuplicateClientsForSameRoute() {
+        val route = PgPaymentRoute(PgProvider("toss"), PgPaymentProduct("payment"))
 
         assertFailsWith<DuplicatePgPaymentClientException> {
             PgPaymentClientRegistry(
                 listOf(
-                    StubPgPaymentClient(provider),
-                    StubPgPaymentClient(provider),
+                    StubPgPaymentClient(route),
+                    StubPgPaymentClient(route),
                 ),
             )
         }
     }
 
     @Test
-    fun throwsWhenClientDoesNotExistForProvider() {
-        val registry = PgPaymentClientRegistry(listOf(StubPgPaymentClient(PgProvider("toss"))))
+    fun throwsWhenClientDoesNotExistForRoute() {
+        val registry = PgPaymentClientRegistry(listOf(StubPgPaymentClient(PgPaymentRoute(PgProvider("toss"), PgPaymentProduct("payment")))))
 
         assertFailsWith<PgPaymentClientNotFoundException> {
-            registry.get(PgProvider("kakao"))
+            registry.get(PgPaymentRoute(PgProvider("toss"), PgPaymentProduct("brandpay")))
         }
     }
 
     @Test
     fun delegatesPrepareLookupAuthorizeAndCancelContractsToClient() {
-        val provider = PgProvider("toss")
-        val client = StubPgPaymentClient(provider)
+        val route = PgPaymentRoute(PgProvider("toss"), PgPaymentProduct("payment"))
+        val client = StubPgPaymentClient(route)
 
         val prepared =
             client.prepare(
@@ -82,7 +93,7 @@ class PgPaymentClientRegistryTests {
     }
 
     private class StubPgPaymentClient(
-        override val provider: PgProvider,
+        override val route: PgPaymentRoute,
     ) : PgPaymentClient {
         override fun prepare(request: PgPrepareRequest): PgPrepareResponse =
             PgPrepareResponse(

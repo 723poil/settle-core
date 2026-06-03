@@ -3,6 +3,7 @@ package com.settle.domains.payment.persistence
 import com.settle.domains.merchant.persistence.MerchantEntity
 import com.settle.domains.merchant.persistence.PgMerchantAccountEntity
 import com.settle.domains.merchant.persistence.PgProviderEntity
+import jakarta.persistence.Column
 import jakarta.persistence.Table
 import org.junit.jupiter.api.Test
 import java.math.BigDecimal
@@ -24,6 +25,7 @@ class PaymentEntityMappingTests {
             PgMerchantAccountEntity(
                 merchant = merchant,
                 pgProvider = pgProvider,
+                pgProduct = "payment",
                 pgMid = "mid-001",
                 displayName = "기본 MID",
             )
@@ -31,6 +33,7 @@ class PaymentEntityMappingTests {
             PaymentTransactionEntity(
                 merchant = merchant,
                 pgProvider = pgProvider,
+                pgProduct = "payment",
                 pgMerchantAccount = pgMerchantAccount,
                 merchantOrderId = "order-001",
                 pgTransactionId = "pg-tx-001",
@@ -42,6 +45,15 @@ class PaymentEntityMappingTests {
             )
 
         assertEquals(7, paymentTransaction.id.version())
+    }
+
+    @Test
+    fun mapsPgProductOnPaymentTransaction() {
+        val column = requireNotNull(PaymentTransactionEntity::class.java.getDeclaredField("pgProduct").getAnnotation(Column::class.java))
+
+        assertEquals("pg_product", column.name)
+        assertEquals(false, column.nullable)
+        assertEquals(60, column.length)
     }
 
     private fun assertTable(

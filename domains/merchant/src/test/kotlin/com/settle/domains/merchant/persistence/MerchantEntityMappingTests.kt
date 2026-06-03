@@ -1,5 +1,6 @@
 package com.settle.domains.merchant.persistence
 
+import jakarta.persistence.Column
 import jakarta.persistence.Table
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
@@ -21,6 +22,15 @@ class MerchantEntityMappingTests {
             )
 
         assertEquals(7, merchant.id.version())
+    }
+
+    @Test
+    fun mapsPgProductOnMerchantPgAccount() {
+        val column = requireNotNull(PgMerchantAccountEntity::class.java.getDeclaredField("pgProduct").getAnnotation(Column::class.java))
+
+        assertEquals("pg_product", column.name)
+        assertEquals(false, column.nullable)
+        assertEquals(60, column.length)
     }
 
     private fun assertTable(

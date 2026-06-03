@@ -17,6 +17,14 @@ class ApiConnectionPropertiesTests {
         assertEquals("false", property("spring.flyway.enabled"))
     }
 
+    @Test
+    fun configuresPgClientProperties() {
+        assertEquals("\${PG_TOSS_PAYMENTS_SECRET_KEY:}", property("pg.toss-payments.secret-key"))
+        assertEquals("\${PG_PAYPAL_ACCESS_TOKEN:}", property("pg.paypal.access-token"))
+        assertEquals("\${PG_KIWOOM_PAY_CPID:}", property("pg.kiwoom-pay.accounts[0].cpid"))
+        assertEquals("\${PG_KIWOOM_PAY_TYPE:PAYMENT}", property("pg.kiwoom-pay.accounts[0].type"))
+    }
+
     private fun property(name: String): String? = properties[name]?.toString()
 
     @Suppress("UNCHECKED_CAST")

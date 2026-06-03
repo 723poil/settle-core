@@ -1,7 +1,7 @@
 package com.settle.libs.pgclient
 
 interface PgPaymentClient {
-    val provider: PgProvider
+    val route: PgPaymentRoute
 
     fun prepare(request: PgPrepareRequest): PgPrepareResponse
 

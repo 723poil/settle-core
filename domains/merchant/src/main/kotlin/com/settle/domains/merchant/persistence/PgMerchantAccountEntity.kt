@@ -16,7 +16,7 @@ import java.util.UUID
 @Table(
     schema = "merchant",
     name = "pg_merchant_accounts",
-    uniqueConstraints = [UniqueConstraint(name = "uq_pg_merchant_accounts_mid", columnNames = ["pg_provider_id", "pg_mid"])],
+    uniqueConstraints = [UniqueConstraint(name = "uq_pg_merchant_accounts_mid", columnNames = ["pg_provider_id", "pg_product", "pg_mid"])],
 )
 open class PgMerchantAccountEntity(
     @Id
@@ -28,6 +28,8 @@ open class PgMerchantAccountEntity(
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "pg_provider_id", nullable = false)
     open var pgProvider: PgProviderEntity,
+    @Column(name = "pg_product", nullable = false, length = 60)
+    open var pgProduct: String,
     @Column(name = "pg_mid", nullable = false, length = 120)
     open var pgMid: String,
     @Column(name = "display_name", nullable = false, length = 120)

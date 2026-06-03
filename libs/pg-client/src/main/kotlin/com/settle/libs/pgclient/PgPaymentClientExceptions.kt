@@ -5,9 +5,19 @@ sealed class PgPaymentClientException(
 ) : RuntimeException(message)
 
 class DuplicatePgPaymentClientException(
-    val provider: PgProvider,
-) : PgPaymentClientException("Duplicate PG payment client for provider '${provider.code}'")
+    val route: PgPaymentRoute,
+) : PgPaymentClientException("Duplicate PG payment client for route '${route.provider.code}:${route.product.code}'")
 
 class PgPaymentClientNotFoundException(
-    val provider: PgProvider,
-) : PgPaymentClientException("PG payment client not found for provider '${provider.code}'")
+    val route: PgPaymentRoute,
+) : PgPaymentClientException("PG payment client not found for route '${route.provider.code}:${route.product.code}'")
+
+class PgPaymentAccountNotFoundException(
+    val route: PgPaymentRoute,
+    val pgMid: String,
+) : PgPaymentClientException("PG payment account '$pgMid' not found for route '${route.provider.code}:${route.product.code}'")
+
+class PgPaymentOperationNotSupportedException(
+    val route: PgPaymentRoute,
+    val operation: String,
+) : PgPaymentClientException("PG payment operation '$operation' is not supported for route '${route.provider.code}:${route.product.code}'")
