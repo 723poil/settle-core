@@ -15,6 +15,7 @@
 - Kafka
 - Docker Compose
 - Spotless + ktlint
+- Kover
 - mise-managed Java 21 and Kotlin
 
 ## Modules
@@ -131,11 +132,50 @@ Kafka connection smoke check succeeded: 1 broker(s)
 
 ## Quality Checks
 
+Payment 모듈 테스트 실행:
+
+```bash
+mise run test-payment
+```
+
 포맷 검사와 테스트 실행:
 
 ```bash
 mise run check
 ```
+
+테스트 커버리지 리포트 생성:
+
+```bash
+mise run coverage
+```
+
+HTML 리포트는 다음 경로에서 확인할 수 있습니다.
+
+```text
+build/reports/kover/html/index.html
+```
+
+CI 연동이나 외부 분석 도구가 필요할 때는 XML 리포트를 생성합니다.
+
+```bash
+mise run coverage-xml
+```
+
+```text
+build/reports/kover/report.xml
+```
+
+현재 커버리지 수치를 콘솔에서 확인하거나 기준만 검증할 수도 있습니다.
+
+```bash
+mise run coverage-log
+mise run coverage-verify
+```
+
+커버리지 측정은 Kotlin 코드 기준으로 Kover를 사용합니다. 수치를 높이기 위한 테스트보다 결제 유즈케이스, PG provider 라우팅, 서킷브레이커 동작처럼 실제 장애 대응과 도메인 흐름을 검증하는 테스트를 우선합니다.
+
+커버리지 목표는 line/branch coverage 90%입니다. 빌드 검증은 각 항목이 85% 미만이면 실패하도록 설정합니다.
 
 포맷 적용:
 

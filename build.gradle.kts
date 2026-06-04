@@ -1,4 +1,5 @@
 import io.spring.gradle.dependencymanagement.dsl.DependencyManagementExtension
+import kotlinx.kover.gradle.plugin.dsl.CoverageUnit
 import org.jetbrains.kotlin.gradle.dsl.KotlinJvmProjectExtension
 import org.springframework.boot.gradle.plugin.SpringBootPlugin
 
@@ -22,6 +23,7 @@ plugins {
     id("io.spring.dependency-management") version "1.1.7" apply false
     id("org.flywaydb.flyway") version "12.6.2"
     id("com.diffplug.spotless") version "8.6.0"
+    id("org.jetbrains.kotlinx.kover") version "0.9.8"
 }
 
 group = "com.settle"
@@ -30,6 +32,8 @@ description = "Payment settlement core"
 
 val ktlintVersion = "1.8.0"
 val kotlinVersion = "2.2.21"
+val coverageTarget = 90
+val coverageMinimum = 85
 
 flyway {
     url = System.getenv("DB_URL") ?: "jdbc:postgresql://localhost:5432/settle_core"
@@ -39,6 +43,23 @@ flyway {
     schemas = arrayOf("migration", "merchant", "payment", "settlement")
     locations = arrayOf("filesystem:libs/persistence/src/main/resources/db/migration")
     cleanDisabled = true
+}
+
+kover {
+    merge {
+        subprojects()
+    }
+
+    reports {
+        verify {
+            rule("line coverage minimum $coverageMinimum% / target $coverageTarget%") {
+                minBound(coverageMinimum, CoverageUnit.LINE)
+            }
+            rule("branch coverage minimum $coverageMinimum% / target $coverageTarget%") {
+                minBound(coverageMinimum, CoverageUnit.BRANCH)
+            }
+        }
+    }
 }
 
 allprojects {
@@ -52,6 +73,8 @@ allprojects {
 
 subprojects {
     pluginManager.withPlugin("org.jetbrains.kotlin.jvm") {
+        pluginManager.apply("org.jetbrains.kotlinx.kover")
+
         extensions.configure<KotlinJvmProjectExtension> {
             jvmToolchain(21)
 

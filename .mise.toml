@@ -71,6 +71,34 @@ trap 'kill $watch_pid' EXIT
 description = "포맷 검사와 테스트 실행"
 run = "./gradlew spotlessCheck check"
 
+[tasks.test-payment]
+description = "Payment 모듈 테스트 실행"
+run = "./gradlew :domains:payment:test"
+
+[tasks.coverage]
+description = "전체 프로젝트 테스트 커버리지 HTML 리포트 생성"
+run = "./gradlew koverHtmlReport"
+
+[tasks.coverage-xml]
+description = "전체 프로젝트 테스트 커버리지 XML 리포트 생성"
+run = "./gradlew koverXmlReport"
+
+[tasks.coverage-log]
+description = "전체 프로젝트 테스트 커버리지 수치 출력"
+run = "./gradlew koverLog"
+
+[tasks.coverage-verify]
+description = "전체 프로젝트 테스트 커버리지 기준 검증"
+run = "./gradlew koverVerify"
+
+[tasks.coverage-payment]
+description = "Payment 모듈 테스트 커버리지 HTML 리포트 생성"
+run = "./gradlew :domains:payment:koverHtmlReport"
+
+[tasks.coverage-payment-xml]
+description = "Payment 모듈 테스트 커버리지 XML 리포트 생성"
+run = "./gradlew :domains:payment:koverXmlReport"
+
 [tasks.format]
 description = "Kotlin과 기타 파일 포맷 적용"
 run = "./gradlew spotlessApply"
