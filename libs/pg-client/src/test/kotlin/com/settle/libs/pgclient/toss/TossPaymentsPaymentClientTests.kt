@@ -17,6 +17,7 @@ import org.junit.jupiter.api.Test
 import java.math.BigDecimal
 import java.util.Base64
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 
 class TossPaymentsPaymentClientTests {
     @Test
@@ -140,6 +141,54 @@ class TossPaymentsPaymentClientTests {
         assertEquals("고객 요청", transport.lastRequest.body["cancelReason"])
         assertEquals(BigDecimal("1000"), transport.lastRequest.body["cancelAmount"])
         assertEquals(PgPaymentStatus.CANCELED, response.status)
+    }
+
+    @Test
+    fun mapsTossPaymentStatuses() {
+        val cases =
+            mapOf(
+                "IN_PROGRESS" to PgPaymentStatus.READY,
+                "WAITING_FOR_DEPOSIT" to PgPaymentStatus.READY,
+                "PARTIAL_CANCELED" to PgPaymentStatus.PARTIAL_CANCELED,
+                "ABORTED" to PgPaymentStatus.FAILED,
+                "EXPIRED" to PgPaymentStatus.FAILED,
+                "UNKNOWN" to PgPaymentStatus.FAILED,
+            )
+
+        cases.forEach { (tossStatus, expectedStatus) ->
+            val client =
+                TossPaymentsPaymentClient(secretKey = "test_sk", transport = RecordingTransport(tossPaymentResponse(status = tossStatus)))
+
+            val response = client.lookup(PgLookupRequest(pgMid = "unused-mid", pgTransactionId = "payment-key"))
+
+            assertEquals(expectedStatus, response.status)
+        }
+    }
+
+    @Test
+    fun lookupReturnsNullApprovalAndCancelTimesWhenTossPayloadDoesNotHaveThem() {
+        val client =
+            TossPaymentsPaymentClient(
+                secretKey = "test_sk",
+                transport =
+                    RecordingTransport(
+                        PgHttpResponse(
+                            body =
+                                mapOf(
+                                    "paymentKey" to "payment-key",
+                                    "status" to "READY",
+                                    "totalAmount" to BigDecimal("1000"),
+                                    "currency" to "KRW",
+                                ),
+                        ),
+                    ),
+            )
+
+        val response = client.lookup(PgLookupRequest(pgMid = "unused-mid", pgTransactionId = "payment-key"))
+
+        assertEquals(PgPaymentStatus.READY, response.status)
+        assertNull(response.approvedAt)
+        assertNull(response.canceledAt)
     }
 
     private fun tossPaymentResponse(

@@ -16,6 +16,7 @@ import com.settle.libs.pgclient.http.PgHttpTransport
 import org.junit.jupiter.api.Test
 import java.math.BigDecimal
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 
 class PayPalPaymentClientTests {
     @Test
@@ -164,6 +165,119 @@ class PayPalPaymentClientTests {
         assertEquals(mapOf("value" to "1000.00", "currency_code" to "USD"), transport.lastRequest.body["amount"])
         assertEquals(PgPaymentStatus.CANCELED, response.status)
     }
+
+    @Test
+    fun prepareReturnsNullCheckoutUrlWhenApproveLinkIsMissing() {
+        val client =
+            PayPalPaymentClient(
+                accessToken = "access-token",
+                transport =
+                    RecordingTransport(
+                        PgHttpResponse(
+                            body =
+                                mapOf(
+                                    "id" to "ORDER-001",
+                                    "status" to "CREATED",
+                                    "create_time" to "2026-06-03T00:00:00Z",
+                                    "links" to listOf(mapOf("rel" to "self", "href" to "https://paypal.example/order")),
+                                ),
+                        ),
+                    ),
+            )
+
+        val response = client.prepare(prepareRequest())
+
+        assertNull(response.checkoutUrl)
+    }
+
+    @Test
+    fun mapsPayPalCaptureStatuses() {
+        val cases =
+            mapOf(
+                "SAVED" to PgPaymentStatus.READY,
+                "APPROVED" to PgPaymentStatus.READY,
+                "PENDING" to PgPaymentStatus.READY,
+                "VOIDED" to PgPaymentStatus.CANCELED,
+                "REFUNDED" to PgPaymentStatus.CANCELED,
+                "PARTIALLY_REFUNDED" to PgPaymentStatus.PARTIAL_CANCELED,
+                "DECLINED" to PgPaymentStatus.FAILED,
+                "FAILED" to PgPaymentStatus.FAILED,
+                "UNKNOWN" to PgPaymentStatus.FAILED,
+            )
+
+        cases.forEach { (payPalStatus, expectedStatus) ->
+            val client =
+                PayPalPaymentClient(
+                    accessToken = "access-token",
+                    transport =
+                        RecordingTransport(
+                            PgHttpResponse(
+                                body =
+                                    mapOf(
+                                        "id" to "CAPTURE-001",
+                                        "status" to payPalStatus,
+                                        "amount" to mapOf("value" to "1000.00", "currency_code" to "USD"),
+                                        "update_time" to "2026-06-03T00:00:01Z",
+                                    ),
+                            ),
+                        ),
+                )
+
+            val response = client.lookup(PgLookupRequest(pgMid = "unused-mid", pgTransactionId = "CAPTURE-001"))
+
+            assertEquals(expectedStatus, response.status)
+        }
+    }
+
+    @Test
+    fun mapsPayPalRefundStatuses() {
+        val cases =
+            mapOf(
+                "PENDING" to PgPaymentStatus.READY,
+                "FAILED" to PgPaymentStatus.FAILED,
+                "UNKNOWN" to PgPaymentStatus.FAILED,
+            )
+
+        cases.forEach { (payPalStatus, expectedStatus) ->
+            val client =
+                PayPalPaymentClient(
+                    accessToken = "access-token",
+                    transport =
+                        RecordingTransport(
+                            PgHttpResponse(
+                                body =
+                                    mapOf(
+                                        "id" to "REFUND-001",
+                                        "status" to payPalStatus,
+                                        "amount" to mapOf("value" to "1000.00", "currency_code" to "USD"),
+                                        "update_time" to "2026-06-03T00:00:02Z",
+                                    ),
+                            ),
+                        ),
+                )
+
+            val response =
+                client.cancel(
+                    PgCancelRequest(
+                        pgMid = "unused-mid",
+                        pgTransactionId = "CAPTURE-001",
+                        cancelAmount = PgMoney(BigDecimal("1000.00"), "USD"),
+                        reason = "고객 요청",
+                        idempotencyKey = "refund-001",
+                    ),
+                )
+
+            assertEquals(expectedStatus, response.status)
+        }
+    }
+
+    private fun prepareRequest(): PgPrepareRequest =
+        PgPrepareRequest(
+            pgMid = "unused-mid",
+            merchantOrderId = "order-001",
+            orderName = "테스트 주문",
+            amount = PgMoney(BigDecimal("1000.00"), "USD"),
+        )
 
     private class RecordingTransport(
         private val response: PgHttpResponse,

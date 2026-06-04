@@ -229,6 +229,75 @@ class KiwoomPayPaymentClientTests {
     }
 
     @Test
+    fun mapsFailedKiwoomReadyResultAndMissingAuthDateFallback() {
+        val transport =
+            QueueTransport(
+                listOf(
+                    PgHttpResponse(
+                        body =
+                            mapOf(
+                                "RETURNURL" to "https://apitest.kiwoompay.co.kr/pay/card",
+                                "TOKEN" to "ready-token",
+                            ),
+                    ),
+                    PgHttpResponse(
+                        body =
+                            mapOf(
+                                "RESULTCODE" to "9999",
+                                "DAOUTRX" to "DAOUTRX-FAILED",
+                            ),
+                    ),
+                ),
+            )
+        val client =
+            KiwoomPayPaymentClient(
+                accounts = listOf(KiwoomPayAccount(cpid = "CPID001", authorizationKey = "kiwoom-auth-key")),
+                transport = transport,
+            )
+
+        val response =
+            client.prepare(
+                PgPrepareRequest(
+                    pgMid = "CPID001",
+                    merchantOrderId = "order-001",
+                    orderName = "테스트 주문",
+                    amount = PgMoney(BigDecimal("1000.00"), "KRW"),
+                    metadata =
+                        mapOf(
+                            "PAYMETHOD" to "CARD-SUGI",
+                            "PRODUCTTYPE" to "1",
+                            "BILLTYPE" to "1",
+                            "IPADDRESS" to "127.0.0.1",
+                            "USERID" to "user-001",
+                        ),
+                ),
+            )
+
+        assertEquals(PgPaymentStatus.FAILED, response.status)
+        assertEquals("DAOUTRX-FAILED", response.pgTransactionId)
+    }
+
+    @Test
+    fun rejectsPrepareWhenRequiredKiwoomMetadataIsMissing() {
+        val client =
+            KiwoomPayPaymentClient(
+                accounts = listOf(KiwoomPayAccount(cpid = "CPID001", authorizationKey = "kiwoom-auth-key")),
+                transport = QueueTransport(emptyList()),
+            )
+
+        assertFailsWith<IllegalArgumentException> {
+            client.prepare(
+                PgPrepareRequest(
+                    pgMid = "CPID001",
+                    merchantOrderId = "order-001",
+                    orderName = "테스트 주문",
+                    amount = PgMoney(BigDecimal("1000.00"), "KRW"),
+                ),
+            )
+        }
+    }
+
+    @Test
     fun explicitlyRejectsOperationsThatAreNotCoveredByPublicGuideYet() {
         val client =
             KiwoomPayPaymentClient(
