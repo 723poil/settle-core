@@ -8,6 +8,7 @@ import java.time.Instant
 import java.util.UUID
 
 data class PreparedPayment(
+    val idempotencyKey: String,
     val merchantId: UUID,
     val pgProviderId: UUID,
     val pgMerchantAccountId: UUID,
@@ -25,6 +26,7 @@ data class PreparedPayment(
 ) {
     companion object {
         fun from(
+            idempotencyKey: String,
             account: PgMerchantAccount,
             merchantOrderId: String,
             amount: BigDecimal,
@@ -32,6 +34,7 @@ data class PreparedPayment(
             response: PgPrepareResponse,
         ): PreparedPayment =
             PreparedPayment(
+                idempotencyKey = idempotencyKey,
                 merchantId = account.merchantId,
                 pgProviderId = account.pgProviderId,
                 pgMerchantAccountId = account.pgMerchantAccountId,

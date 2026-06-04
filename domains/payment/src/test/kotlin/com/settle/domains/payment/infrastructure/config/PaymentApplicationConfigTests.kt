@@ -1,17 +1,21 @@
 package com.settle.domains.payment.infrastructure.config
 
-import com.settle.domains.payment.application.port.PaymentRecordPort
-import com.settle.domains.payment.application.port.PgMerchantAccountLookupPort
+import com.settle.domains.payment.application.port.concurrency.PaymentConcurrencyLockPort
+import com.settle.domains.payment.application.port.persistence.PaymentPersistenceRecordPort
+import com.settle.domains.payment.application.port.persistence.PgMerchantAccountPersistenceLookupPort
 import com.settle.domains.payment.application.provider.PgPaymentProvider
 import com.settle.domains.payment.application.usecase.AuthorizePaymentUseCase
 import com.settle.domains.payment.application.usecase.CancelPaymentUseCase
 import com.settle.domains.payment.application.usecase.LookupPaymentUseCase
+import com.settle.domains.payment.application.usecase.PaymentLockOperation
 import com.settle.domains.payment.application.usecase.PreparePaymentCommand
 import com.settle.domains.payment.application.usecase.PreparePaymentUseCase
+import com.settle.domains.payment.domain.model.AuthorizedPayment
+import com.settle.domains.payment.domain.model.PaymentTransactionSnapshot
 import com.settle.domains.payment.domain.model.PgMerchantAccount
 import com.settle.domains.payment.domain.model.PreparedPayment
 import com.settle.domains.payment.infrastructure.circuitbreaker.PgPaymentCircuitBreakerProperties
-import com.settle.domains.payment.infrastructure.circuitbreaker.Resilience4jPgPaymentOperationCircuitBreaker
+import com.settle.domains.payment.infrastructure.circuitbreaker.Resilience4jPgPaymentCircuitBreakerAdapter
 import com.settle.libs.pgclient.PgAuthorizeRequest
 import com.settle.libs.pgclient.PgAuthorizeResponse
 import com.settle.libs.pgclient.PgCancelRequest
@@ -42,26 +46,33 @@ class PaymentApplicationConfigTests {
         val config = PaymentApplicationConfig()
         val client = StubPgPaymentClient(PgPaymentRoute(PgProvider("tosspayments"), PgPaymentProduct("payment")))
         val registry = config.pgPaymentCircuitBreakerRegistry(PgPaymentCircuitBreakerProperties())
-        val circuitBreaker = config.pgPaymentOperationCircuitBreaker(registry)
+        val circuitBreaker = config.pgPaymentCircuitBreakerPort(registry)
         val providers = config.pgPaymentProviders(listOf(client), circuitBreaker)
         val providerRegistry = config.pgPaymentProviderRegistry(providers)
 
         assertEquals(1, providers.size)
         assertIs<PgPaymentProvider>(providerRegistry.get(client.route))
-        assertIs<Resilience4jPgPaymentOperationCircuitBreaker>(circuitBreaker)
+        assertIs<Resilience4jPgPaymentCircuitBreakerAdapter>(circuitBreaker)
         assertIs<PreparePaymentUseCase>(
-            config.preparePaymentUseCase(StubPgMerchantAccountLookupPort, StubPaymentRecordPort, providerRegistry),
+            config.preparePaymentUseCase(
+                StubPgMerchantAccountPersistenceLookupPort,
+                StubPaymentPersistenceRecordPort,
+                StubPaymentConcurrencyLockPort,
+                providerRegistry,
+            ),
         )
         assertIs<LookupPaymentUseCase>(config.lookupPaymentUseCase(providerRegistry))
-        assertIs<AuthorizePaymentUseCase>(config.authorizePaymentUseCase(providerRegistry))
-        assertIs<CancelPaymentUseCase>(config.cancelPaymentUseCase(providerRegistry))
+        assertIs<AuthorizePaymentUseCase>(
+            config.authorizePaymentUseCase(StubPaymentPersistenceRecordPort, StubPaymentConcurrencyLockPort, providerRegistry),
+        )
+        assertIs<CancelPaymentUseCase>(config.cancelPaymentUseCase(StubPaymentConcurrencyLockPort, providerRegistry))
     }
 
     @Test
     fun defaultCircuitBreakerCanBeReplacedByRealImplementation() {
         val method =
             PaymentApplicationConfig::class.java.getDeclaredMethod(
-                "pgPaymentOperationCircuitBreaker",
+                "pgPaymentCircuitBreakerPort",
                 CircuitBreakerRegistry::class.java,
             )
 
@@ -102,7 +113,7 @@ class PaymentApplicationConfigTests {
             )
     }
 
-    private object StubPgMerchantAccountLookupPort : PgMerchantAccountLookupPort {
+    private object StubPgMerchantAccountPersistenceLookupPort : PgMerchantAccountPersistenceLookupPort {
         override fun getActiveAccount(command: PreparePaymentCommand): PgMerchantAccount =
             PgMerchantAccount(
                 merchantId = UUID.fromString("018f0000-0000-7000-8000-000000000001"),
@@ -115,7 +126,19 @@ class PaymentApplicationConfigTests {
             )
     }
 
-    private object StubPaymentRecordPort : PaymentRecordPort {
+    private object StubPaymentPersistenceRecordPort : PaymentPersistenceRecordPort {
+        override fun findPaymentByIdempotencyKey(idempotencyKey: String): PaymentTransactionSnapshot? = null
+
         override fun recordPreparedPayment(payment: PreparedPayment) = Unit
+
+        override fun recordAuthorizedPayment(payment: AuthorizedPayment) = Unit
+    }
+
+    private object StubPaymentConcurrencyLockPort : PaymentConcurrencyLockPort {
+        override fun <T> withLock(
+            operation: PaymentLockOperation,
+            idempotencyKey: String,
+            block: () -> T,
+        ): T = block()
     }
 }

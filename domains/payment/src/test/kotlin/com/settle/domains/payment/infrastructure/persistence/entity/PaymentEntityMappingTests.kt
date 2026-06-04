@@ -76,6 +76,17 @@ class PaymentEntityMappingTests {
         assertEquals(60, column.length)
     }
 
+    @Test
+    fun mapsIdempotencyKeyOnPaymentTransaction() {
+        val column =
+            requireNotNull(PaymentTransactionEntity::class.java.getDeclaredField("idempotencyKey").getAnnotation(Column::class.java))
+
+        assertEquals("idempotency_key", column.name)
+        assertEquals(false, column.nullable)
+        assertEquals(true, column.unique)
+        assertEquals(120, column.length)
+    }
+
     private fun paymentTransaction(): PaymentTransactionEntity {
         val merchant = MerchantEntity(merchantKey = "merchant-key", name = "테스트 상점")
         val pgProvider = PgProviderEntity(code = "test-pg", name = "테스트 PG")
@@ -89,6 +100,7 @@ class PaymentEntityMappingTests {
             )
         val paymentTransaction =
             PaymentTransactionEntity(
+                idempotencyKey = "idempotency-001",
                 merchant = merchant,
                 pgProvider = pgProvider,
                 pgProduct = "payment",

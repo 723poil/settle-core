@@ -2,7 +2,7 @@ package com.settle.domains.payment.infrastructure.pg
 
 import com.settle.domains.payment.application.circuitbreaker.PgPaymentCircuitBreakerKey
 import com.settle.domains.payment.application.circuitbreaker.PgPaymentCircuitBreakerOperation
-import com.settle.domains.payment.application.port.PgPaymentOperationCircuitBreaker
+import com.settle.domains.payment.application.port.circuitbreaker.PgPaymentCircuitBreakerPort
 import com.settle.domains.payment.application.provider.PgPaymentProvider
 import com.settle.libs.pgclient.PgAuthorizeRequest
 import com.settle.libs.pgclient.PgAuthorizeResponse
@@ -17,7 +17,7 @@ import com.settle.libs.pgclient.PgPrepareResponse
 
 class PgClientPaymentProviderAdapter(
     private val client: PgPaymentClient,
-    private val circuitBreaker: PgPaymentOperationCircuitBreaker,
+    private val circuitBreaker: PgPaymentCircuitBreakerPort,
 ) : PgPaymentProvider {
     override val route: PgPaymentRoute = client.route
 

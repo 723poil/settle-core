@@ -2,7 +2,7 @@ package com.settle.domains.payment.infrastructure.pg
 
 import com.settle.domains.payment.application.circuitbreaker.PgPaymentCircuitBreakerKey
 import com.settle.domains.payment.application.circuitbreaker.PgPaymentCircuitBreakerOperation
-import com.settle.domains.payment.application.port.PgPaymentOperationCircuitBreaker
+import com.settle.domains.payment.application.port.circuitbreaker.PgPaymentCircuitBreakerPort
 import com.settle.libs.pgclient.PgAuthorizeRequest
 import com.settle.libs.pgclient.PgAuthorizeResponse
 import com.settle.libs.pgclient.PgCancelRequest
@@ -95,7 +95,7 @@ class PgPaymentProviderAdapterTests {
         assertEquals(0, client.prepareRequests.size)
     }
 
-    private class RecordingCircuitBreaker : PgPaymentOperationCircuitBreaker {
+    private class RecordingCircuitBreaker : PgPaymentCircuitBreakerPort {
         val keys = mutableListOf<PgPaymentCircuitBreakerKey>()
 
         override fun <T> execute(
@@ -107,7 +107,7 @@ class PgPaymentProviderAdapterTests {
         }
     }
 
-    private class RejectingCircuitBreaker : PgPaymentOperationCircuitBreaker {
+    private class RejectingCircuitBreaker : PgPaymentCircuitBreakerPort {
         override fun <T> execute(
             key: PgPaymentCircuitBreakerKey,
             block: () -> T,

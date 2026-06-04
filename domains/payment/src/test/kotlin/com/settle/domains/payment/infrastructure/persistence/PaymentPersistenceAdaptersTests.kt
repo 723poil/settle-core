@@ -5,6 +5,7 @@ import com.settle.domains.merchant.persistence.MerchantStatus
 import com.settle.domains.merchant.persistence.PgMerchantAccountEntity
 import com.settle.domains.merchant.persistence.PgProviderEntity
 import com.settle.domains.payment.application.usecase.PreparePaymentCommand
+import com.settle.domains.payment.domain.model.AuthorizedPayment
 import com.settle.domains.payment.domain.model.PaymentEvent
 import com.settle.domains.payment.domain.model.PaymentEventType
 import com.settle.domains.payment.domain.model.PaymentStatus
@@ -83,6 +84,7 @@ class PaymentPersistenceAdaptersTests {
 
         val transaction = transactions.saved.single()
         val event = events.saved.single()
+        assertEquals("idempotency-001", transaction.idempotencyKey)
         assertEquals(merchant, transaction.merchant)
         assertEquals(provider, transaction.pgProvider)
         assertEquals(account, transaction.pgMerchantAccount)
@@ -132,6 +134,90 @@ class PaymentPersistenceAdaptersTests {
     }
 
     @Test
+    fun recordAdapterFindsPaymentSnapshotByIdempotencyKey() {
+        val merchant = merchantEntity()
+        val provider = providerEntity()
+        val account = accountEntity(merchant, provider)
+        val transactions =
+            RecordingPaymentTransactionRepository().apply {
+                paymentByIdempotencyKey = paymentTransactionEntity(merchant, provider, account)
+            }
+        val adapter =
+            JpaPaymentRecordAdapter(
+                entityManager = entityManager(emptyMap()),
+                paymentTransactions = transactions.proxy(),
+                paymentEvents = RecordingPaymentEventRepository().proxy(),
+            )
+
+        val snapshot = adapter.findPaymentByIdempotencyKey("idempotency-001")
+
+        assertNotNull(snapshot)
+        assertEquals("idempotency-001", snapshot.idempotencyKey)
+        assertEquals(merchant.id, snapshot.merchantId)
+        assertEquals(provider.id, snapshot.pgProviderId)
+        assertEquals(account.id, snapshot.pgMerchantAccountId)
+        assertEquals("merchant-key", snapshot.merchantKey)
+        assertEquals(PgProvider("tosspayments"), snapshot.pgProvider)
+        assertEquals(PgPaymentProduct("payment"), snapshot.pgProduct)
+        assertEquals("mid-001", snapshot.pgMid)
+        assertEquals("order-001", snapshot.merchantOrderId)
+        assertEquals("pg-tx-001", snapshot.pgTransactionId)
+        assertEquals(PaymentStatus.REQUESTED, snapshot.status)
+        assertEquals(BigDecimal("1000.00"), snapshot.amount)
+        assertEquals("KRW", snapshot.currency)
+    }
+
+    @Test
+    fun recordAdapterRecordsAuthorizedPaymentOnExistingTransaction() {
+        val merchant = merchantEntity()
+        val provider = providerEntity()
+        val account = accountEntity(merchant, provider)
+        val transaction = paymentTransactionEntity(merchant, provider, account)
+        val transactions =
+            RecordingPaymentTransactionRepository().apply {
+                paymentByIdempotencyKey = transaction
+            }
+        val events = RecordingPaymentEventRepository()
+        val adapter =
+            JpaPaymentRecordAdapter(
+                entityManager = entityManager(emptyMap()),
+                paymentTransactions = transactions.proxy(),
+                paymentEvents = events.proxy(),
+            )
+
+        adapter.recordAuthorizedPayment(authorizedPayment())
+
+        assertEquals("pg-tx-authorized-001", transaction.pgTransactionId)
+        assertEquals(PaymentTransactionStatusEntity.APPROVED, transaction.status)
+        assertEquals(BigDecimal("1000.00"), transaction.amount)
+        assertEquals("KRW", transaction.currency)
+        assertEquals(Instant.parse("2026-06-04T00:00:01Z"), transaction.approvedAt)
+
+        val event = events.saved.single()
+        assertEquals(transaction, event.paymentTransaction)
+        assertEquals("AUTHORIZE", event.eventType)
+        assertEquals("APPROVED", event.eventStatus)
+        assertEquals("pg-tx-authorized-001", event.pgEventId)
+        assertEquals(BigDecimal("1000.00"), event.amount)
+        assertEquals("KRW", event.currency)
+        assertEquals(mapOf("authKey" to "auth-001"), event.rawPayload)
+    }
+
+    @Test
+    fun recordAdapterFailsWhenAuthorizingMissingTransaction() {
+        val adapter =
+            JpaPaymentRecordAdapter(
+                entityManager = entityManager(emptyMap()),
+                paymentTransactions = RecordingPaymentTransactionRepository().proxy(),
+                paymentEvents = RecordingPaymentEventRepository().proxy(),
+            )
+
+        assertFailsWith<PaymentTransactionEntityNotFoundException> {
+            adapter.recordAuthorizedPayment(authorizedPayment())
+        }
+    }
+
+    @Test
     fun recordPreparedPaymentHasTransactionalBoundary() {
         val method =
             JpaPaymentRecordAdapter::class.java.getDeclaredMethod(
@@ -170,6 +256,7 @@ class PaymentPersistenceAdaptersTests {
 
     private class RecordingPaymentTransactionRepository {
         val saved = mutableListOf<PaymentTransactionEntity>()
+        var paymentByIdempotencyKey: PaymentTransactionEntity? = null
 
         fun proxy(): PaymentTransactionJpaRepository =
             proxy { method, args ->
@@ -177,7 +264,10 @@ class PaymentPersistenceAdaptersTests {
                     @Suppress("UNCHECKED_CAST")
                     val entity = args[0] as PaymentTransactionEntity
                     saved += entity
+                    paymentByIdempotencyKey = entity
                     entity
+                } else if (method.name == "findByIdempotencyKey") {
+                    paymentByIdempotencyKey
                 } else {
                     defaultObjectMethod(method)
                 }
@@ -207,6 +297,7 @@ class PaymentPersistenceAdaptersTests {
 
         fun prepareCommand(): PreparePaymentCommand =
             PreparePaymentCommand(
+                idempotencyKey = "idempotency-001",
                 merchantKey = "merchant-key",
                 pgProvider = PgProvider("tosspayments"),
                 pgProduct = PgPaymentProduct("payment"),
@@ -252,6 +343,7 @@ class PaymentPersistenceAdaptersTests {
             rawPayload: Map<String, Any?>? = mapOf("checkoutKey" to "checkout-001"),
         ): PreparedPayment =
             PreparedPayment(
+                idempotencyKey = "idempotency-001",
                 merchantId = merchant.id,
                 pgProviderId = provider.id,
                 pgMerchantAccountId = account.id,
@@ -275,6 +367,46 @@ class PaymentPersistenceAdaptersTests {
                         occurredAt = Instant.parse("2026-06-04T00:00:00Z"),
                         rawPayload = rawPayload,
                     ),
+            )
+
+        fun authorizedPayment(): AuthorizedPayment =
+            AuthorizedPayment(
+                idempotencyKey = "idempotency-001",
+                pgTransactionId = "pg-tx-authorized-001",
+                status = PaymentStatus.APPROVED,
+                amount = BigDecimal("1000.00"),
+                currency = "KRW",
+                approvedAt = Instant.parse("2026-06-04T00:00:01Z"),
+                event =
+                    PaymentEvent(
+                        type = PaymentEventType.AUTHORIZE,
+                        status = "APPROVED",
+                        pgEventId = "pg-tx-authorized-001",
+                        amount = BigDecimal("1000.00"),
+                        currency = "KRW",
+                        occurredAt = Instant.parse("2026-06-04T00:00:01Z"),
+                        rawPayload = mapOf("authKey" to "auth-001"),
+                    ),
+            )
+
+        fun paymentTransactionEntity(
+            merchant: MerchantEntity,
+            provider: PgProviderEntity,
+            account: PgMerchantAccountEntity,
+        ): PaymentTransactionEntity =
+            PaymentTransactionEntity(
+                idempotencyKey = "idempotency-001",
+                merchant = merchant,
+                pgProvider = provider,
+                pgProduct = account.pgProduct,
+                pgMerchantAccount = account,
+                merchantOrderId = "order-001",
+                pgTransactionId = "pg-tx-001",
+                transactionType = PaymentTransactionTypeEntity.PAYMENT,
+                status = PaymentTransactionStatusEntity.REQUESTED,
+                amount = BigDecimal("1000.00"),
+                currency = "KRW",
+                occurredAt = Instant.parse("2026-06-04T00:00:00Z"),
             )
 
         fun entityManager(references: Map<UUID, Any>): EntityManager =

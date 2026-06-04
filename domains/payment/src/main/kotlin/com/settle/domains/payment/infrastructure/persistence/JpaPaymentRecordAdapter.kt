@@ -3,8 +3,10 @@ package com.settle.domains.payment.infrastructure.persistence
 import com.settle.domains.merchant.persistence.MerchantEntity
 import com.settle.domains.merchant.persistence.PgMerchantAccountEntity
 import com.settle.domains.merchant.persistence.PgProviderEntity
-import com.settle.domains.payment.application.port.PaymentRecordPort
+import com.settle.domains.payment.application.port.persistence.PaymentPersistenceRecordPort
+import com.settle.domains.payment.domain.model.AuthorizedPayment
 import com.settle.domains.payment.domain.model.PaymentStatus
+import com.settle.domains.payment.domain.model.PaymentTransactionSnapshot
 import com.settle.domains.payment.domain.model.PreparedPayment
 import com.settle.domains.payment.infrastructure.persistence.entity.PaymentEventEntity
 import com.settle.domains.payment.infrastructure.persistence.entity.PaymentTransactionEntity
@@ -19,12 +21,16 @@ class JpaPaymentRecordAdapter(
     private val entityManager: EntityManager,
     private val paymentTransactions: PaymentTransactionJpaRepository,
     private val paymentEvents: PaymentEventJpaRepository,
-) : PaymentRecordPort {
+) : PaymentPersistenceRecordPort {
+    override fun findPaymentByIdempotencyKey(idempotencyKey: String): PaymentTransactionSnapshot? =
+        paymentTransactions.findByIdempotencyKey(idempotencyKey)?.toSnapshot()
+
     @Transactional
     override fun recordPreparedPayment(payment: PreparedPayment) {
         val transaction =
             paymentTransactions.save(
                 PaymentTransactionEntity(
+                    idempotencyKey = payment.idempotencyKey,
                     merchant = entityManager.getReference(MerchantEntity::class.java, payment.merchantId),
                     pgProvider = entityManager.getReference(PgProviderEntity::class.java, payment.pgProviderId),
                     pgProduct = payment.pgProduct.code,
@@ -53,6 +59,32 @@ class JpaPaymentRecordAdapter(
         )
     }
 
+    @Transactional
+    override fun recordAuthorizedPayment(payment: AuthorizedPayment) {
+        val transaction =
+            paymentTransactions.findByIdempotencyKey(payment.idempotencyKey)
+                ?: throw PaymentTransactionEntityNotFoundException(payment.idempotencyKey)
+
+        transaction.pgTransactionId = payment.pgTransactionId
+        transaction.status = payment.status.toEntityStatus()
+        transaction.amount = payment.amount
+        transaction.currency = payment.currency
+        transaction.approvedAt = payment.approvedAt
+
+        paymentEvents.save(
+            PaymentEventEntity(
+                paymentTransaction = transaction,
+                eventType = payment.event.type.name,
+                eventStatus = payment.event.status,
+                pgEventId = payment.event.pgEventId,
+                amount = payment.event.amount,
+                currency = payment.event.currency,
+                occurredAt = payment.event.occurredAt,
+                rawPayload = payment.event.rawPayload,
+            ),
+        )
+    }
+
     private fun PaymentStatus.toEntityStatus(): PaymentTransactionStatusEntity =
         when (this) {
             PaymentStatus.REQUESTED -> PaymentTransactionStatusEntity.REQUESTED
@@ -60,4 +92,37 @@ class JpaPaymentRecordAdapter(
             PaymentStatus.CANCELED -> PaymentTransactionStatusEntity.CANCELED
             PaymentStatus.FAILED -> PaymentTransactionStatusEntity.FAILED
         }
+
+    private fun PaymentTransactionEntity.toSnapshot(): PaymentTransactionSnapshot =
+        PaymentTransactionSnapshot(
+            idempotencyKey = idempotencyKey,
+            merchantId = merchant.id,
+            pgProviderId = pgProvider.id,
+            pgMerchantAccountId = pgMerchantAccount.id,
+            merchantKey = merchant.merchantKey,
+            pgProvider =
+                com.settle.libs.pgclient
+                    .PgProvider(pgProvider.code),
+            pgProduct =
+                com.settle.libs.pgclient
+                    .PgPaymentProduct(pgProduct),
+            pgMid = pgMerchantAccount.pgMid,
+            merchantOrderId = merchantOrderId,
+            pgTransactionId = pgTransactionId,
+            status = status.toPaymentStatus(),
+            amount = amount,
+            currency = currency,
+        )
+
+    private fun PaymentTransactionStatusEntity.toPaymentStatus(): PaymentStatus =
+        when (this) {
+            PaymentTransactionStatusEntity.REQUESTED -> PaymentStatus.REQUESTED
+            PaymentTransactionStatusEntity.APPROVED -> PaymentStatus.APPROVED
+            PaymentTransactionStatusEntity.CANCELED -> PaymentStatus.CANCELED
+            PaymentTransactionStatusEntity.FAILED -> PaymentStatus.FAILED
+        }
 }
+
+class PaymentTransactionEntityNotFoundException(
+    idempotencyKey: String,
+) : RuntimeException("Payment transaction entity not found for idempotency key '$idempotencyKey'")

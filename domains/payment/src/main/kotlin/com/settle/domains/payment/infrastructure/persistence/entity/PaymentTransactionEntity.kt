@@ -34,6 +34,8 @@ open class PaymentTransactionEntity(
     @Id
     @Column(name = "id", nullable = false)
     open var id: UUID = UuidV7.generate(),
+    @Column(name = "idempotency_key", nullable = false, unique = true, length = 120)
+    open var idempotencyKey: String,
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "merchant_id", nullable = false)
     open var merchant: MerchantEntity,

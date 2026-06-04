@@ -14,14 +14,14 @@ import java.time.Duration
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 
-class Resilience4jPgPaymentOperationCircuitBreakerTests {
+class Resilience4jPgPaymentCircuitBreakerAdapterTests {
     private val route = PgPaymentRoute(PgProvider("tosspayments"), PgPaymentProduct("payment"))
     private val prepareKey = PgPaymentCircuitBreakerKey(route, PgPaymentCircuitBreakerOperation.PREPARE, "mid-001")
 
     @Test
     fun opensCircuitAndRejectsCallsWhenFailureRateThresholdIsExceeded() {
         val registry = CircuitBreakerRegistry.of(testConfig())
-        val circuitBreaker = Resilience4jPgPaymentOperationCircuitBreaker(registry)
+        val circuitBreaker = Resilience4jPgPaymentCircuitBreakerAdapter(registry)
         var attempts = 0
 
         repeat(2) {
@@ -46,7 +46,7 @@ class Resilience4jPgPaymentOperationCircuitBreakerTests {
     @Test
     fun managesCircuitStateByCircuitName() {
         val registry = CircuitBreakerRegistry.of(testConfig())
-        val circuitBreaker = Resilience4jPgPaymentOperationCircuitBreaker(registry)
+        val circuitBreaker = Resilience4jPgPaymentCircuitBreakerAdapter(registry)
         val authorizeKey = PgPaymentCircuitBreakerKey(route, PgPaymentCircuitBreakerOperation.AUTHORIZE, "mid-001")
 
         repeat(2) {
@@ -70,7 +70,7 @@ class Resilience4jPgPaymentOperationCircuitBreakerTests {
     @Test
     fun defaultPropertiesKeepCircuitClosedUntilMinimumCallCountIsReached() {
         val registry = CircuitBreakerRegistry.of(PgPaymentCircuitBreakerProperties().toConfig())
-        val circuitBreaker = Resilience4jPgPaymentOperationCircuitBreaker(registry)
+        val circuitBreaker = Resilience4jPgPaymentCircuitBreakerAdapter(registry)
 
         repeat(9) {
             assertFailsWith<IllegalStateException> {
@@ -102,7 +102,7 @@ class Resilience4jPgPaymentOperationCircuitBreakerTests {
                     permittedNumberOfCallsInHalfOpenState = 3,
                 ).toConfig(),
             )
-        val circuitBreaker = Resilience4jPgPaymentOperationCircuitBreaker(registry)
+        val circuitBreaker = Resilience4jPgPaymentCircuitBreakerAdapter(registry)
 
         repeat(3) {
             assertFailsWith<IllegalStateException> {
@@ -135,7 +135,7 @@ class Resilience4jPgPaymentOperationCircuitBreakerTests {
                     slidingWindowSize = 2,
                 ).toConfig(),
             )
-        val circuitBreaker = Resilience4jPgPaymentOperationCircuitBreaker(registry)
+        val circuitBreaker = Resilience4jPgPaymentCircuitBreakerAdapter(registry)
 
         repeat(2) {
             assertEquals(

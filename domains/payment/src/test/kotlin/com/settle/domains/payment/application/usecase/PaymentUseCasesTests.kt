@@ -1,11 +1,14 @@
 package com.settle.domains.payment.application.usecase
 
-import com.settle.domains.payment.application.port.PaymentRecordPort
-import com.settle.domains.payment.application.port.PgMerchantAccountLookupPort
+import com.settle.domains.payment.application.port.concurrency.PaymentConcurrencyLockPort
+import com.settle.domains.payment.application.port.persistence.PaymentPersistenceRecordPort
+import com.settle.domains.payment.application.port.persistence.PgMerchantAccountPersistenceLookupPort
 import com.settle.domains.payment.application.provider.PgPaymentProvider
 import com.settle.domains.payment.application.provider.PgPaymentProviderRegistry
+import com.settle.domains.payment.domain.model.AuthorizedPayment
 import com.settle.domains.payment.domain.model.PaymentEventType
 import com.settle.domains.payment.domain.model.PaymentStatus
+import com.settle.domains.payment.domain.model.PaymentTransactionSnapshot
 import com.settle.domains.payment.domain.model.PgMerchantAccount
 import com.settle.domains.payment.domain.model.PreparedPayment
 import com.settle.libs.pgclient.PgAuthorizeRequest
@@ -36,14 +39,16 @@ class PaymentUseCasesTests {
     @Test
     fun prepareUseCaseResolvesMerchantAccountCallsPgOutsideTransactionAndRecordsResult() {
         val transactionProbe = TransactionProbe()
-        val accountLookup = StubPgMerchantAccountLookupPort(account())
+        val accountLookup = StubPgMerchantAccountPersistenceLookupPort(account())
         val provider = RecordingPgPaymentProvider(route, transactionProbe)
-        val records = RecordingPaymentRecordPort(transactionProbe)
-        val useCase = PreparePaymentUseCase(accountLookup, records, PgPaymentProviderRegistry(listOf(provider)))
+        val records = RecordingPaymentPersistenceRecordPort(transactionProbe, existingPayment = null)
+        val locks = RecordingPaymentConcurrencyLockPort()
+        val useCase = PreparePaymentUseCase(accountLookup, records, locks, PgPaymentProviderRegistry(listOf(provider)))
         val command = prepareCommand()
 
         val response = useCase.prepare(command)
 
+        assertEquals("payment:prepare:idempotency-001", locks.keys.single())
         assertEquals("mid-001", provider.prepareRequests.single().pgMid)
         assertEquals("order-001", provider.prepareRequests.single().merchantOrderId)
         assertEquals("테스트 주문", provider.prepareRequests.single().orderName)
@@ -51,6 +56,7 @@ class PaymentUseCasesTests {
         assertEquals(account().merchantId, records.preparedPayments.single().merchantId)
         assertEquals(account().pgProviderId, records.preparedPayments.single().pgProviderId)
         assertEquals(account().pgMerchantAccountId, records.preparedPayments.single().pgMerchantAccountId)
+        assertEquals("idempotency-001", records.preparedPayments.single().idempotencyKey)
         assertEquals("order-001", records.preparedPayments.single().merchantOrderId)
         assertEquals("pg-tx-001", records.preparedPayments.single().pgTransactionId)
         assertEquals(PaymentStatus.REQUESTED, records.preparedPayments.single().status)
@@ -74,10 +80,16 @@ class PaymentUseCasesTests {
     @Test
     fun prepareUseCaseDoesNotRecordPaymentWhenPgPrepareFails() {
         val transactionProbe = TransactionProbe()
-        val accountLookup = StubPgMerchantAccountLookupPort(account())
+        val accountLookup = StubPgMerchantAccountPersistenceLookupPort(account())
         val provider = FailingPgPaymentProvider(route)
-        val records = RecordingPaymentRecordPort(transactionProbe)
-        val useCase = PreparePaymentUseCase(accountLookup, records, PgPaymentProviderRegistry(listOf(provider)))
+        val records = RecordingPaymentPersistenceRecordPort(transactionProbe, existingPayment = null)
+        val useCase =
+            PreparePaymentUseCase(
+                accountLookup,
+                records,
+                RecordingPaymentConcurrencyLockPort(),
+                PgPaymentProviderRegistry(listOf(provider)),
+            )
 
         assertFailsWith<IllegalStateException> {
             useCase.prepare(prepareCommand())
@@ -87,9 +99,46 @@ class PaymentUseCasesTests {
     }
 
     @Test
+    fun prepareUseCaseDoesNotCallPgWhenIdempotencyKeyAlreadyExistsInDatabase() {
+        val provider = RecordingPgPaymentProvider(route)
+        val useCase =
+            PreparePaymentUseCase(
+                StubPgMerchantAccountPersistenceLookupPort(account()),
+                RecordingPaymentPersistenceRecordPort(TransactionProbe(), existingPayment = paymentSnapshot()),
+                RecordingPaymentConcurrencyLockPort(),
+                PgPaymentProviderRegistry(listOf(provider)),
+            )
+
+        assertFailsWith<DuplicatePaymentRequestException> {
+            useCase.prepare(prepareCommand())
+        }
+
+        assertEquals(emptyList(), provider.prepareRequests)
+    }
+
+    @Test
+    fun prepareUseCaseDoesNotCallPgWhenPaymentConcurrencyLockIsAlreadyHeld() {
+        val provider = RecordingPgPaymentProvider(route)
+        val useCase =
+            PreparePaymentUseCase(
+                StubPgMerchantAccountPersistenceLookupPort(account()),
+                RecordingPaymentPersistenceRecordPort(TransactionProbe(), existingPayment = null),
+                RejectingPaymentConcurrencyLockPort(),
+                PgPaymentProviderRegistry(listOf(provider)),
+            )
+
+        assertFailsWith<DuplicatePaymentRequestException> {
+            useCase.prepare(prepareCommand())
+        }
+
+        assertEquals(emptyList(), provider.prepareRequests)
+    }
+
+    @Test
     fun prepareCommandRejectsBlankRequiredFields() {
         val invalidCommands =
             listOf(
+                { prepareCommand(idempotencyKey = " ") },
                 { prepareCommand(merchantKey = " ") },
                 { prepareCommand(pgMid = " ") },
                 { prepareCommand(merchantOrderId = " ") },
@@ -116,40 +165,98 @@ class PaymentUseCasesTests {
     }
 
     @Test
-    fun authorizeUseCaseDelegatesToProviderSelectedByRoute() {
+    fun authorizeUseCaseLoadsPaymentByIdempotencyKeyAndRecordsApprovedResult() {
         val provider = RecordingPgPaymentProvider(route)
-        val useCase = AuthorizePaymentUseCase(PgPaymentProviderRegistry(listOf(provider)))
-        val request = authorizeRequest()
+        val records = RecordingPaymentPersistenceRecordPort(TransactionProbe(), existingPayment = paymentSnapshot())
+        val locks = RecordingPaymentConcurrencyLockPort()
+        val useCase = AuthorizePaymentUseCase(records, locks, PgPaymentProviderRegistry(listOf(provider)))
 
-        val response = useCase.authorize(AuthorizePaymentCommand(route, request))
+        val response = useCase.authorize(authorizeCommand())
 
-        assertEquals(request, provider.authorizeRequests.single())
+        assertEquals("payment:authorize:idempotency-001", locks.keys.single())
+        assertEquals(authorizeRequest(), provider.authorizeRequests.single())
+        assertEquals("idempotency-001", records.authorizedPayments.single().idempotencyKey)
+        assertEquals(PaymentStatus.APPROVED, records.authorizedPayments.single().status)
         assertEquals(PgPaymentStatus.APPROVED, response.status)
     }
 
     @Test
-    fun cancelUseCaseDelegatesToProviderSelectedByRoute() {
+    fun authorizeUseCaseCancelsApprovedPaymentWhenDatabaseRecordFails() {
         val provider = RecordingPgPaymentProvider(route)
-        val useCase = CancelPaymentUseCase(PgPaymentProviderRegistry(listOf(provider)))
+        val records =
+            RecordingPaymentPersistenceRecordPort(TransactionProbe(), existingPayment = paymentSnapshot()).apply {
+                failAuthorizeRecord = true
+            }
+        val useCase = AuthorizePaymentUseCase(records, RecordingPaymentConcurrencyLockPort(), PgPaymentProviderRegistry(listOf(provider)))
+
+        assertFailsWith<IllegalStateException> {
+            useCase.authorize(authorizeCommand())
+        }
+
+        assertEquals(authorizeRequest(), provider.authorizeRequests.single())
+        assertEquals(cancelCompensationRequest(), provider.cancelRequests.single())
+    }
+
+    @Test
+    fun authorizeUseCaseDoesNotCallPgWhenPaymentCannotBeFoundByIdempotencyKey() {
+        val provider = RecordingPgPaymentProvider(route)
+        val records = RecordingPaymentPersistenceRecordPort(TransactionProbe(), existingPayment = null)
+        val useCase = AuthorizePaymentUseCase(records, RecordingPaymentConcurrencyLockPort(), PgPaymentProviderRegistry(listOf(provider)))
+
+        assertFailsWith<PaymentTransactionNotFoundException> {
+            useCase.authorize(authorizeCommand())
+        }
+
+        assertEquals(emptyList(), provider.authorizeRequests)
+    }
+
+    @Test
+    fun authorizeUseCaseDoesNotCompensateWhenFailedAuthorizationRecordFails() {
+        val provider = RecordingPgPaymentProvider(route, authorizeStatus = PgPaymentStatus.FAILED)
+        val records =
+            RecordingPaymentPersistenceRecordPort(TransactionProbe(), existingPayment = paymentSnapshot()).apply {
+                failAuthorizeRecord = true
+            }
+        val useCase = AuthorizePaymentUseCase(records, RecordingPaymentConcurrencyLockPort(), PgPaymentProviderRegistry(listOf(provider)))
+
+        assertFailsWith<IllegalStateException> {
+            useCase.authorize(authorizeCommand())
+        }
+
+        assertEquals(authorizeRequest(), provider.authorizeRequests.single())
+        assertEquals(emptyList(), provider.cancelRequests)
+    }
+
+    @Test
+    fun cancelUseCaseDelegatesToProviderSelectedByRouteWithConcurrencyLock() {
+        val provider = RecordingPgPaymentProvider(route)
+        val locks = RecordingPaymentConcurrencyLockPort()
+        val useCase = CancelPaymentUseCase(locks, PgPaymentProviderRegistry(listOf(provider)))
         val request = cancelRequest()
 
         val response = useCase.cancel(CancelPaymentCommand(route, request))
 
+        assertEquals("payment:cancel:idempotency-001", locks.keys.single())
         assertEquals(request, provider.cancelRequests.single())
         assertEquals(PgPaymentStatus.CANCELED, response.status)
     }
 
-    private class StubPgMerchantAccountLookupPort(
+    private class StubPgMerchantAccountPersistenceLookupPort(
         private val account: PgMerchantAccount,
-    ) : PgMerchantAccountLookupPort {
+    ) : PgMerchantAccountPersistenceLookupPort {
         override fun getActiveAccount(command: PreparePaymentCommand): PgMerchantAccount = account
     }
 
-    private class RecordingPaymentRecordPort(
+    private class RecordingPaymentPersistenceRecordPort(
         private val transactionProbe: TransactionProbe,
-    ) : PaymentRecordPort {
+        private val existingPayment: PaymentTransactionSnapshot?,
+    ) : PaymentPersistenceRecordPort {
         val preparedPayments = mutableListOf<PreparedPayment>()
+        val authorizedPayments = mutableListOf<AuthorizedPayment>()
         var recordedInsideTransaction = false
+        var failAuthorizeRecord = false
+
+        override fun findPaymentByIdempotencyKey(idempotencyKey: String): PaymentTransactionSnapshot? = existingPayment
 
         override fun recordPreparedPayment(payment: PreparedPayment) {
             transactionProbe.inTransaction = true
@@ -157,6 +264,36 @@ class PaymentUseCasesTests {
             preparedPayments += payment
             transactionProbe.inTransaction = false
         }
+
+        override fun recordAuthorizedPayment(payment: AuthorizedPayment) {
+            if (failAuthorizeRecord) {
+                throw IllegalStateException("DB record failed")
+            }
+            transactionProbe.inTransaction = true
+            authorizedPayments += payment
+            transactionProbe.inTransaction = false
+        }
+    }
+
+    private class RecordingPaymentConcurrencyLockPort : PaymentConcurrencyLockPort {
+        val keys = mutableListOf<String>()
+
+        override fun <T> withLock(
+            operation: PaymentLockOperation,
+            idempotencyKey: String,
+            block: () -> T,
+        ): T {
+            keys += operation.redisKey(idempotencyKey)
+            return block()
+        }
+    }
+
+    private class RejectingPaymentConcurrencyLockPort : PaymentConcurrencyLockPort {
+        override fun <T> withLock(
+            operation: PaymentLockOperation,
+            idempotencyKey: String,
+            block: () -> T,
+        ): T = throw DuplicatePaymentRequestException(operation.redisKey(idempotencyKey))
     }
 
     private class TransactionProbe {
@@ -166,6 +303,7 @@ class PaymentUseCasesTests {
     private class RecordingPgPaymentProvider(
         override val route: PgPaymentRoute,
         private val transactionProbe: TransactionProbe = TransactionProbe(),
+        private val authorizeStatus: PgPaymentStatus = PgPaymentStatus.APPROVED,
     ) : PgPaymentProvider {
         val prepareRequests = mutableListOf<PgPrepareRequest>()
         val lookupRequests = mutableListOf<PgLookupRequest>()
@@ -196,7 +334,7 @@ class PaymentUseCasesTests {
             authorizeRequests += request
             return PgAuthorizeResponse(
                 pgTransactionId = request.pgTransactionId,
-                status = PgPaymentStatus.APPROVED,
+                status = authorizeStatus,
                 amount = request.amount,
                 approvedAt = Instant.parse("2026-06-04T00:00:01Z"),
             )
@@ -239,13 +377,32 @@ class PaymentUseCasesTests {
                 pgMid = "mid-001",
             )
 
+        fun paymentSnapshot(): PaymentTransactionSnapshot =
+            PaymentTransactionSnapshot(
+                idempotencyKey = "idempotency-001",
+                merchantId = UUID.fromString("018f0000-0000-7000-8000-000000000001"),
+                pgProviderId = UUID.fromString("018f0000-0000-7000-8000-000000000002"),
+                pgMerchantAccountId = UUID.fromString("018f0000-0000-7000-8000-000000000003"),
+                merchantKey = "merchant-key",
+                pgProvider = PgProvider("tosspayments"),
+                pgProduct = PgPaymentProduct("payment"),
+                pgMid = "mid-001",
+                merchantOrderId = "order-001",
+                pgTransactionId = "pg-tx-001",
+                status = PaymentStatus.REQUESTED,
+                amount = money().amount,
+                currency = money().currency,
+            )
+
         fun prepareCommand(
+            idempotencyKey: String = "idempotency-001",
             merchantKey: String = "merchant-key",
             pgMid: String = "mid-001",
             merchantOrderId: String = "order-001",
             orderName: String = "테스트 주문",
         ): PreparePaymentCommand =
             PreparePaymentCommand(
+                idempotencyKey = idempotencyKey,
                 merchantKey = merchantKey,
                 pgProvider = PgProvider("tosspayments"),
                 pgProduct = PgPaymentProduct("payment"),
@@ -255,18 +412,16 @@ class PaymentUseCasesTests {
                 amount = money(),
             )
 
-        fun prepareRequest(): PgPrepareRequest =
-            PgPrepareRequest(
-                pgMid = "mid-001",
-                merchantOrderId = "order-001",
-                orderName = "테스트 주문",
-                amount = money(),
-            )
-
         fun lookupRequest(): PgLookupRequest =
             PgLookupRequest(
                 pgMid = "mid-001",
                 pgTransactionId = "pg-tx-001",
+            )
+
+        fun authorizeCommand(): AuthorizePaymentCommand =
+            AuthorizePaymentCommand(
+                idempotencyKey = "idempotency-001",
+                authorizationToken = "auth-token-001",
             )
 
         fun authorizeRequest(): PgAuthorizeRequest =
@@ -284,7 +439,16 @@ class PaymentUseCasesTests {
                 pgTransactionId = "pg-tx-001",
                 cancelAmount = money(),
                 reason = "사용자 요청",
-                idempotencyKey = "cancel-001",
+                idempotencyKey = "idempotency-001",
+            )
+
+        fun cancelCompensationRequest(): PgCancelRequest =
+            PgCancelRequest(
+                pgMid = "mid-001",
+                pgTransactionId = "pg-tx-001",
+                cancelAmount = money(),
+                reason = "authorization persistence failed",
+                idempotencyKey = "idempotency-001",
             )
     }
 }

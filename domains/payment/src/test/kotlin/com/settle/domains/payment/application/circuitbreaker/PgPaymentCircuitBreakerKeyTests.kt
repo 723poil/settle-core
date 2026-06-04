@@ -19,8 +19,10 @@ class PgPaymentCircuitBreakerKeyTests {
 
     @Test
     fun rejectsBlankPgMid() {
-        assertFailsWith<IllegalArgumentException> {
-            PgPaymentCircuitBreakerKey(route, PgPaymentCircuitBreakerOperation.AUTHORIZE, " ")
+        listOf("", " ").forEach { pgMid ->
+            assertFailsWith<IllegalArgumentException> {
+                PgPaymentCircuitBreakerKey(route, PgPaymentCircuitBreakerOperation.AUTHORIZE, pgMid)
+            }
         }
     }
 }

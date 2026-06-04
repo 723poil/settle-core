@@ -34,6 +34,7 @@ class SettlementEntityMappingTests {
             )
         val paymentTransaction =
             PaymentTransactionEntity(
+                idempotencyKey = "idempotency-001",
                 merchant = merchant,
                 pgProvider = pgProvider,
                 pgProduct = "payment",

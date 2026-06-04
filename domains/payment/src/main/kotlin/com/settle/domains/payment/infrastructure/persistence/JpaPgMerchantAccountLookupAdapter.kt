@@ -1,7 +1,7 @@
 package com.settle.domains.payment.infrastructure.persistence
 
 import com.settle.domains.merchant.persistence.MerchantStatus
-import com.settle.domains.payment.application.port.PgMerchantAccountLookupPort
+import com.settle.domains.payment.application.port.persistence.PgMerchantAccountPersistenceLookupPort
 import com.settle.domains.payment.application.usecase.PreparePaymentCommand
 import com.settle.domains.payment.domain.model.PgMerchantAccount
 import com.settle.domains.payment.infrastructure.persistence.repository.PaymentPgMerchantAccountJpaRepository
@@ -10,7 +10,7 @@ import com.settle.libs.pgclient.PgProvider
 
 class JpaPgMerchantAccountLookupAdapter(
     private val accounts: PaymentPgMerchantAccountJpaRepository,
-) : PgMerchantAccountLookupPort {
+) : PgMerchantAccountPersistenceLookupPort {
     override fun getActiveAccount(command: PreparePaymentCommand): PgMerchantAccount {
         val account =
             accounts

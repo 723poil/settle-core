@@ -1,8 +1,8 @@
-package com.settle.domains.payment.application.port
+package com.settle.domains.payment.application.port.circuitbreaker
 
 import com.settle.domains.payment.application.circuitbreaker.PgPaymentCircuitBreakerKey
 
-interface PgPaymentOperationCircuitBreaker {
+interface PgPaymentCircuitBreakerPort {
     fun <T> execute(
         key: PgPaymentCircuitBreakerKey,
         block: () -> T,
