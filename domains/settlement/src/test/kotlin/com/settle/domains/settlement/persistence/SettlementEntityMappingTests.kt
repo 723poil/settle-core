@@ -3,9 +3,9 @@ package com.settle.domains.settlement.persistence
 import com.settle.domains.merchant.persistence.MerchantEntity
 import com.settle.domains.merchant.persistence.PgMerchantAccountEntity
 import com.settle.domains.merchant.persistence.PgProviderEntity
-import com.settle.domains.payment.persistence.PaymentTransactionEntity
-import com.settle.domains.payment.persistence.PaymentTransactionStatus
-import com.settle.domains.payment.persistence.PaymentTransactionType
+import com.settle.domains.payment.infrastructure.persistence.entity.PaymentTransactionEntity
+import com.settle.domains.payment.infrastructure.persistence.entity.PaymentTransactionStatusEntity
+import com.settle.domains.payment.infrastructure.persistence.entity.PaymentTransactionTypeEntity
 import jakarta.persistence.Table
 import org.junit.jupiter.api.Test
 import java.math.BigDecimal
@@ -40,8 +40,8 @@ class SettlementEntityMappingTests {
                 pgMerchantAccount = pgMerchantAccount,
                 merchantOrderId = "order-001",
                 pgTransactionId = "pg-tx-001",
-                transactionType = PaymentTransactionType.PAYMENT,
-                status = PaymentTransactionStatus.APPROVED,
+                transactionType = PaymentTransactionTypeEntity.PAYMENT,
+                status = PaymentTransactionStatusEntity.APPROVED,
                 amount = BigDecimal("1000.00"),
                 currency = "KRW",
                 occurredAt = Instant.parse("2026-06-03T00:00:00Z"),

@@ -1,4 +1,4 @@
-package com.settle.domains.payment.persistence
+package com.settle.domains.payment.infrastructure.persistence.entity
 
 import com.settle.libs.common.id.UuidV7
 import jakarta.persistence.Column

@@ -37,6 +37,14 @@ server:
   port: ${SERVER_PORT:8080}
 
 pg:
+  circuit-breaker:
+    failure-rate-threshold: ${PG_CIRCUIT_BREAKER_FAILURE_RATE_THRESHOLD:50}
+    slow-call-rate-threshold: ${PG_CIRCUIT_BREAKER_SLOW_CALL_RATE_THRESHOLD:100}
+    slow-call-duration-threshold: ${PG_CIRCUIT_BREAKER_SLOW_CALL_DURATION_THRESHOLD:3s}
+    minimum-number-of-calls: ${PG_CIRCUIT_BREAKER_MINIMUM_NUMBER_OF_CALLS:10}
+    sliding-window-size: ${PG_CIRCUIT_BREAKER_SLIDING_WINDOW_SIZE:20}
+    wait-duration-in-open-state: ${PG_CIRCUIT_BREAKER_WAIT_DURATION_IN_OPEN_STATE:30s}
+    permitted-number-of-calls-in-half-open-state: ${PG_CIRCUIT_BREAKER_PERMITTED_NUMBER_OF_CALLS_IN_HALF_OPEN_STATE:3}
   toss-payments:
     secret-key: ${PG_TOSS_PAYMENTS_SECRET_KEY:}
     base-url: ${PG_TOSS_PAYMENTS_BASE_URL:https://api.tosspayments.com}

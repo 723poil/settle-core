@@ -1,4 +1,4 @@
-package com.settle.domains.payment.persistence
+package com.settle.domains.payment.infrastructure.persistence.entity
 
 import com.settle.domains.merchant.persistence.MerchantEntity
 import com.settle.domains.merchant.persistence.PgMerchantAccountEntity
@@ -51,10 +51,10 @@ open class PaymentTransactionEntity(
     open var pgTransactionId: String,
     @Enumerated(EnumType.STRING)
     @Column(name = "transaction_type", nullable = false, length = 30)
-    open var transactionType: PaymentTransactionType,
+    open var transactionType: PaymentTransactionTypeEntity,
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 30)
-    open var status: PaymentTransactionStatus,
+    open var status: PaymentTransactionStatusEntity,
     @Column(name = "amount", nullable = false, precision = 19, scale = 2)
     open var amount: BigDecimal,
     @Column(name = "currency", nullable = false, length = 3)

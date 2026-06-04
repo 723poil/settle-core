@@ -1,7 +1,7 @@
 package com.settle.domains.settlement.persistence
 
 import com.settle.domains.merchant.persistence.MerchantEntity
-import com.settle.domains.payment.persistence.PaymentTransactionEntity
+import com.settle.domains.payment.infrastructure.persistence.entity.PaymentTransactionEntity
 import com.settle.libs.common.id.UuidV7
 import com.settle.libs.persistence.BaseTimeEntity
 import jakarta.persistence.Column
